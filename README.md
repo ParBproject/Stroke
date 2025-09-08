@@ -33,6 +33,23 @@ It includes patient information such as:
 
 ---
 
+---
+
+<h2>📸 Screenshots</h2>
+
+<p align="center">
+  <img src="1.png" alt="1" width="600"><br>
+  <em>Figure 1: Data exploration</em>
+</p>
+
+<p align="center">
+  <img src="2.png" alt="2" width="600"><br>
+  <em>Figure 2: Model evaluation</em>
+</p>
+
+
+---
+
 ## 📂 Repository Structure
 
 
