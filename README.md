@@ -34,3 +34,13 @@ It includes patient information such as:
 ---
 
 ## 📂 Repository Structure
+
+
+├── stroke-report.Rmd # Main R code/report
+├── healthcare-dataset-stroke-data.csv # Dataset (if included)
+├── best_stroke_model.rds # Saved best model
+├── training_levels.rds # Factor levels for categorical variables
+├── docs/
+│ ├── index.html # Rendered HTML report (for GitHub Pages)
+│ └── stroke-report.pdf # PDF report (optional)
+└── README.md # Project documentation
