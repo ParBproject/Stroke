@@ -9,7 +9,7 @@ Visit: https://parbproject.github.io/Stroke/ for the full project.
 ---
 
 ## 📊 Dataset
-The dataset comes from [Kaggle – Stroke Prediction Dataset](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).  
+The dataset comes from [Kaggle – Stroke Prediction Dataset]([https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset](https://parbproject.github.io/Stroke/)).  
 
 It includes patient information such as:
 - Gender, age, marital status, work type, residence type  
