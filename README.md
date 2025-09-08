@@ -4,6 +4,8 @@ This project builds and deploys a **stroke prediction model** using R.
 The workflow includes data preprocessing, exploratory data analysis (EDA), model training, model evaluation, and deployment.  
 The final trained model is saved and can be reused for making predictions.
 
+Visit: https://parbproject.github.io/Stroke/ for the full project. 
+
 ---
 
 ## 📊 Dataset
