@@ -37,10 +37,45 @@ It includes patient information such as:
 
 
 ├── stroke-report.Rmd # Main R code/report
+
 ├── healthcare-dataset-stroke-data.csv # Dataset (if included)
+
 ├── best_stroke_model.rds # Saved best model
+
 ├── training_levels.rds # Factor levels for categorical variables
+
 ├── docs/
+
 │ ├── index.html # Rendered HTML report (for GitHub Pages)
+
 │ └── stroke-report.pdf # PDF report (optional)
+
 └── README.md # Project documentation
+
+
+
+
+---
+
+## 🚀 Deployment
+This project is deployed using **GitHub Pages**.  
+
+- HTML report: [https://<your-username>.github.io/<your-repo>/](https://<your-username>.github.io/<your-repo>/)  
+- PDF report: [https://<your-username>.github.io/<your-repo>/stroke-report.pdf](https://<your-username>.github.io/<your-repo>/stroke-report.pdf)
+
+*(Replace `<your-username>` and `<your-repo>` with your GitHub details.)*
+
+---
+
+## 🔧 How to Run Locally
+Clone this repo and run in R:
+
+```r
+# Install dependencies
+install.packages(c("tidyverse","readr","viridis","RColorBrewer",
+                   "caret","randomForest","rpart","pROC","rmarkdown"))
+
+# Knit the report (HTML or PDF)
+rmarkdown::render("stroke-report.Rmd", output_format = "html_document")
+# or
+rmarkdown::render("stroke-report.Rmd", output_format = "pdf_document")
