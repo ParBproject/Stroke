@@ -79,3 +79,7 @@ install.packages(c("tidyverse","readr","viridis","RColorBrewer",
 rmarkdown::render("stroke-report.Rmd", output_format = "html_document")
 # or
 rmarkdown::render("stroke-report.Rmd", output_format = "pdf_document")
+
+
+👤 Author: Analytic Avenger
+📅 Last updated: September 2025
