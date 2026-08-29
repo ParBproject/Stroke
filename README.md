@@ -1,104 +1,64 @@
-# 🧠 Stroke Prediction Model in R
+# Stroke Risk Prediction in R
 
-This project builds and deploys a **stroke prediction model** using R.  
-The workflow includes data preprocessing, exploratory data analysis (EDA), model training, model evaluation, and deployment.  
-The final trained model is saved and can be reused for making predictions.
+[![R](https://img.shields.io/badge/R-Statistical_Modeling-276DC3?logo=r&logoColor=white)](Build-deploy-stroke-prediction-model-R.Rmd)
+[![Report](https://img.shields.io/badge/Report-Live_on_GitHub_Pages-2ea44f)](https://parbproject.github.io/Stroke/)
 
-Visit: https://parbproject.github.io/Stroke/ for the full project. 
+An end-to-end R analytics case study covering data preparation, exploratory analysis, supervised learning, model comparison, and communication of results for a stroke-risk dataset.
 
----
+## Live Report
 
-## 📊 Dataset
-The dataset comes from [Kaggle – Stroke Prediction Dataset]([https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset](https://parbproject.github.io/Stroke/)).  
+**[View the complete rendered analysis](https://parbproject.github.io/Stroke/)**
 
-It includes patient information such as:
-- Gender, age, marital status, work type, residence type  
-- Health factors (hypertension, heart disease, average glucose level, BMI)  
-- Lifestyle factors (smoking status)  
-- Stroke outcome (target variable: 1 = stroke, 0 = no stroke)
+## Project Workflow
 
----
+1. Inspect and clean demographic, health, and lifestyle variables.
+2. Explore class balance, missing values, and feature relationships.
+3. Prepare categorical and numeric predictors for modelling.
+4. Compare logistic regression, decision tree, and random forest approaches.
+5. Evaluate classification performance using ROC-AUC, sensitivity, specificity, and F1 score.
+6. Present findings in a reproducible R Markdown report.
 
-## ⚙️ Features
-- Data cleaning & preprocessing (handling missing values, factors, scaling)  
-- Exploratory Data Analysis (EDA) with visualizations  
-- Machine learning models:
-  - Logistic Regression  
-  - Decision Tree  
-  - Random Forest  
-- Model evaluation using:
-  - Accuracy  
-  - ROC-AUC  
-  - Sensitivity & Specificity  
-  - F1 Score  
-- Deployment-ready model saved as `.rds`  
-
----
-
----
-
-<h2>📸 Screenshots</h2>
+## Preview
 
 <p align="center">
-  <img src="1.png" alt="1" width="600"><br>
-  <em>Figure 1: Data exploration</em>
+  <img src="1.png" alt="Stroke dataset exploratory analysis" width="720">
 </p>
 
 <p align="center">
-  <img src="2.png" alt="2" width="600"><br>
-  <em>Figure 2: Model evaluation</em>
+  <img src="2.png" alt="Stroke model evaluation" width="720">
 </p>
 
+## Dataset
 
----
+The project uses the [Stroke Prediction Dataset on Kaggle](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset). Features include age, hypertension, heart disease, average glucose level, BMI, smoking status, residence type, and the observed stroke outcome.
 
-## 📂 Repository Structure
+## Repository Contents
 
+| File | Purpose |
+|---|---|
+| [Build-deploy-stroke-prediction-model-R.Rmd](Build-deploy-stroke-prediction-model-R.Rmd) | Reproducible source analysis |
+| [Build-deploy-stroke-prediction-model-R.html](Build-deploy-stroke-prediction-model-R.html) | Rendered report |
+| [healthcare-dataset-stroke-data.csv](healthcare-dataset-stroke-data.csv) | Analysis dataset |
+| [index.html](index.html) | GitHub Pages entry point |
 
-├── stroke-report.Rmd # Main R code/report
+## Reproduce the Analysis
 
-├── healthcare-dataset-stroke-data.csv # Dataset (if included)
+~~~r
+install.packages(c(
+  "tidyverse", "readr", "viridis", "RColorBrewer",
+  "caret", "randomForest", "rpart", "pROC", "rmarkdown"
+))
 
-├── best_stroke_model.rds # Saved best model
+rmarkdown::render(
+  "Build-deploy-stroke-prediction-model-R.Rmd",
+  output_format = "html_document"
+)
+~~~
 
-├── training_levels.rds # Factor levels for categorical variables
+## Skills Demonstrated
 
-├── docs/
+R, R Markdown, data cleaning, exploratory data analysis, classification, model comparison, evaluation metrics, and technical reporting.
 
-│ ├── index.html # Rendered HTML report (for GitHub Pages)
+## Responsible Use
 
-│ └── stroke-report.pdf # PDF report (optional)
-
-└── README.md # Project documentation
-
-
-
-
----
-
-## 🚀 Deployment
-This project is deployed using **GitHub Pages**.  
-
-- HTML report: [https://<your-username>.github.io/<your-repo>/](https://<your-username>.github.io/<your-repo>/)  
-- PDF report: [https://<your-username>.github.io/<your-repo>/stroke-report.pdf](https://<your-username>.github.io/<your-repo>/stroke-report.pdf)
-
-*(Replace `<your-username>` and `<your-repo>` with your GitHub details.)*
-
----
-
-## 🔧 How to Run Locally
-Clone this repo and run in R:
-
-```r
-# Install dependencies
-install.packages(c("tidyverse","readr","viridis","RColorBrewer",
-                   "caret","randomForest","rpart","pROC","rmarkdown"))
-
-# Knit the report (HTML or PDF)
-rmarkdown::render("stroke-report.Rmd", output_format = "html_document")
-# or
-rmarkdown::render("stroke-report.Rmd", output_format = "pdf_document")
-
-
-👤 Author: Analytic Avenger
-📅 Last updated: September 2025
+This project is educational and is not a clinical diagnostic tool. Medical decisions require validated models, appropriate governance, and review by qualified healthcare professionals.
