@@ -1,0 +1,19 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+.Renviron
+renv/library/
+renv/staging/
+
+# Render caches
+*_cache/
+*_files/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*
