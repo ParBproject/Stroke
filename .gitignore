@@ -1,3 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
 # R
 .Rhistory
 .RData
@@ -17,3 +23,8 @@ renv/staging/
 .DS_Store
 Thumbs.db
 ~$*
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
