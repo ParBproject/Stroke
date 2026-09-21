@@ -268,16 +268,23 @@ th, td {
   vertical-align: baseline;
 }
 th:first-child, td:first-child { text-align: left; padding-left: 8px; }
-th {
+thead th {
   font-weight: 500;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--soft);
 }
-tr.desk td { background: rgba(199, 55, 47, 0.06); }
-tr.desk td:first-child { box-shadow: inset 3px 0 0 var(--red); }
-tr.age-term td { background: rgba(199, 55, 47, 0.06); }
+tbody th {
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+tr.desk th, tr.desk td,
+tr.age-term th, tr.age-term td { background: rgba(199, 55, 47, 0.06); }
+tr.desk th:first-child { box-shadow: inset 3px 0 0 var(--red); }
 .tag {
   display: inline-block;
   margin-left: 6px;
@@ -295,6 +302,8 @@ tr.age-term td { background: rgba(199, 55, 47, 0.06); }
 }
 
 svg { width: 100%; height: auto; display: block; }
+#roc { max-height: 318px; }
+#calibration { max-height: 268px; }
 svg text {
   font-family: var(--mono);
   font-size: 11px;
@@ -463,7 +472,29 @@ html[data-shot="point"] .question,
 html[data-shot="burden"] .question {
   display: none;
 }
-html[data-shot] .sheet { min-height: 100vh; }
+html[data-shot] .sheet {
+  min-height: 100vh;
+  padding-bottom: 52px;
+}
+html[data-shot] .sheet::after {
+  content: "ParBproject  ·  not a diagnostic device  ·  seed 42";
+  position: absolute;
+  left: 92px;
+  right: 36px;
+  bottom: 16px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(36, 28, 22, 0.22);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+html[data-shot="open"] h2 { font-size: 34px; margin-bottom: 14px; }
+html[data-shot="open"] .count { font-size: 112px; }
+html[data-shot="open"] .prose { font-size: 21px; }
+html[data-shot="open"] .age-row { min-height: 34px; }
+html[data-shot="open"] .spread { margin-top: 8px; }
 html[data-shot="models"] .prose { margin-top: 0; margin-bottom: 8px; }
 html[data-shot="burden"] h2 { margin-bottom: 4px; }
 

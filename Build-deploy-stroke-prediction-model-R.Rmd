@@ -7,6 +7,8 @@ output:
   html_document: default
 ---
 
+> Maintained analysis: the Python casebook (`python3 -m casebook.analyze`, page at `casebook/index.html`). This R Markdown file is an earlier unmaintained pass.
+
 # About Data Analysis Report
 
 The maintained casebook is the Python page at the repository root (`index.html`, `casebook/analyze.py`). This R Markdown is an earlier pass and is not re-knit in CI.

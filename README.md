@@ -1,72 +1,70 @@
-# Casebook 5110 — stroke file, read for a data analyst interview
+# Stroke casebook
 
-**Put this on a data analyst or AI data analyst resume.** The question is not “can you fit a random forest.” It is: a 4.9% event makes accuracy meaningless, age already ranks the file, and a 0.50 cutoff on an unweighted model catches almost nobody.
+A holdout study of the [Kaggle stroke prediction file](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset): 249 strokes in 5,110 rows. The page is a composition-notebook casebook, not a diagnostic tool.
 
-<p align="center">
-  <img src="docs/screenshots/file_and_age.png" alt="Casebook opening: 249 strokes in 5110 rows and age-band rates" width="100%">
-</p>
+**[Open the casebook](https://parbproject.github.io/Stroke/)**
 
-## The holdout, in one table
+## Question
 
-Stratified 80/20 split, seed 42, **before** BMI imputation. 1,022 holdout rows, 50 strokes.
+Can a simple model flag people in this file who have a stroke recorded, without pretending that accuracy or a 0.50 cutoff is a clinical risk?
 
-| Model | ROC-AUC | PR-AUC | Brier | Sensitivity at 0.50 |
-|---|---:|---:|---:|---:|
-| Majority rate | 0.500 | 0.049 | 0.047 | 0% |
-| Age only | 0.834 | 0.197 | 0.174 | 82% |
-| **Logistic (desk)** | **0.842** | **0.271** | **0.041** | 2% |
-| Logistic, class-weighted | 0.844 | 0.269 | 0.168 | 80% |
-| Decision tree | 0.831 | 0.198 | 0.171 | 84% |
-| Random forest | 0.838 | 0.254 | 0.128 | 80% |
+## Method
 
-Class-weighted scores rank about as well as the plain logistic and then lie about the probability (Brier 0.168 versus 0.041). The desk model is the unweighted logistic.
+The split comes first. A stratified 80/20 holdout, seed 42, is cut before any imputation. Missing BMI (201 rows) is filled with the **training** median (28.0). The full-file median is 28.1 and is not used.
 
-<p align="center">
-  <img src="docs/screenshots/model_comparison.png" alt="Holdout model table and ROC curves" width="100%">
-</p>
+Five scores are compared on the holdout:
 
-## Operating point
+| Role | Model |
+|---|---|
+| Baseline | Majority rate (always the training prevalence) |
+| Baseline | Age-only logistic, class-weighted, for ranking |
+| Desk model | Unweighted logistic. These are the probabilities used for calibration, Brier, and the threshold |
+| Comparison | Decision tree, depth 4, minimum leaf 40, balanced |
+| Comparison | Random forest, 300 trees, depth 8, minimum leaf 20, balanced subsample |
 
-On the desk model, the cut with sensitivity at least 70% and the fewest flags is **0.10**.
+A class-weighted logistic is fit only as a ranking footnote. Its scores are not risks, and 0.50 on that model is not a 50% chance.
 
-| | Holdout | Per 1,000 people in this file |
-|---|---:|---:|
-| Sensitivity | 70% | — |
-| Precision | 20.7% | — |
-| False flags per true stroke | 3.8 | — |
-| Flagged | 169 / 1,022 | 165 |
-| Strokes caught | 35 | 34 |
-| Strokes missed | 15 | 15 |
+ROC-AUC describes ranking. PR-AUC is the rare-event metric: the majority model’s PR-AUC sits on the ~4.9% base rate. The operating point is read from the unweighted logistic only: the lowest-flag threshold whose sensitivity is at least 0.70.
 
-<p align="center">
-  <img src="docs/screenshots/desk_threshold.png" alt="Desk threshold on the unweighted logistic" width="100%">
-</p>
+Odds ratios are a separate unweighted logit on the training fold (age per 10 years, glucose per 10 mg/dL, BMI per 5, hypertension, heart disease, married, urban, smoking). `gender == Other` is dropped. Work type is omitted because those levels separated and produced infinite intervals.
 
-## What you can say out loud
+## What the holdout shows
 
-Age, per 10 years, multiplies the odds by about **2.04** (95% CI 1.81–2.30) on the training fold. Hypertension is next (OR 1.58). Glucose and BMI move the odds much less. The calibration plot stays near the diagonal in the bulk of the file, where almost everyone sits below a 12% predicted risk.
+Numbers are from `casebook/metrics.json` (seed 42).
 
-<p align="center">
-  <img src="docs/screenshots/calibration_odds.png" alt="Calibration plot and odds ratios" width="100%">
-</p>
+- Prevalence **4.87%** (249 / 5,110). Calling every row low-risk is right about **95.1%** of the time and catches nobody. Majority recall at 0.50 is **0**.
+- Stroke rate is **0.2%** under 18 (2 / 856) and **21.5%** at 80 and older (40 / 186).
+- ROC-AUC: majority **0.500**, age only **0.834**, unweighted logistic **0.842**, tree **0.831**, forest **0.838**. The full logistic only modestly beats age.
+- PR-AUC: majority **0.049**, age only **0.197**, unweighted logistic **0.271**, forest **0.254**.
+- Brier: unweighted logistic **0.041**, majority **0.047**. The class-weighted logistic’s Brier is **0.168** with ROC **0.844**. Similar rank, not a probability.
+- Operating threshold **0.11** (sensitivity **0.70**, specificity **0.871**, PPV **0.219**, **3.57** false flags per true stroke).
+- Per 1,000 people like the holdout, that threshold flags **156.6**, catches **34.2**, misses **14.7**, and raises **122.3** false flags.
+- Age odds ratio **2.04** per 10 years (95% CI **1.81–2.30**). Hypertension **1.58**. Glucose **1.04** per 10 mg/dL. BMI, after age, is about **1.00**.
 
-## How this should be used in a job search
+## Casebook
 
-- **Data analyst:** open with the age strip, the majority-class trap, and the per-1,000 burden.
-- **AI data analyst:** open with why class weights wreck calibration, why PR-AUC beats accuracy, and why the forest does not earn the logistic’s job.
-- The R Markdown in this repo is an earlier pass. The page and `casebook/analyze.py` are the maintained analysis.
+![Opening spread: 249 of 5,110 and stroke rate by age](docs/screenshots/opening-spread.png)
 
-## Reproduce
+![Model table and holdout ROC](docs/screenshots/model-comparison.png)
+
+![Operating threshold on the unweighted logistic](docs/screenshots/operating-point.png)
+
+![Calibration, odds ratios, and screening burden per 1,000](docs/screenshots/calibration-odds-burden.png)
+
+The live page is `casebook/index.html` (the repository root redirects there, including `?shot=` and `?t=`). `?t=0.15` pins a threshold. `?shot=open|models|point|burden` isolates one spread.
+
+## Run
 
 ```bash
-python -m pip install -r requirements.txt
-python -m casebook.analyze
-python -m pytest -q
-python -m http.server 8000
+python3 -m casebook.analyze
+pytest -q
+python3 -m http.server
 ```
 
-Open http://localhost:8000. The cut slider recomputes sensitivity, precision, and flags from the precomputed holdout grid.
+Then open `http://127.0.0.1:8000/`. Analysis dependencies are in `requirements.txt` (pandas, numpy, scikit-learn 1.9, statsmodels 0.15, pytest).
 
-## Responsible use
+`Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass. The Python casebook is the analysis this repository stands on.
 
-Educational casebook on the public Kaggle stroke file. Not a diagnostic device. A real screening tool needs a prospective cohort, calibration in the population you would actually flag, and a clinician deciding what a false flag costs.
+## Disclaimer
+
+Educational casebook on a public Kaggle file. Not a diagnostic device and not validated for clinical use.

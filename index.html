@@ -1,53 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Casebook 5110 — stroke file, not a diagnosis</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,ital,wght@6..72,0,400;6..72,0,600;6..72,1,400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="casebook/styles.css" />
+  <meta charset="utf-8">
+  <title>Stroke casebook</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="canonical" href="casebook/index.html">
+  <script>
+    var next = "casebook/index.html" + location.search + location.hash;
+    location.replace(next);
+  </script>
+  <meta http-equiv="refresh" content="0; url=casebook/index.html">
 </head>
 <body>
-  <div class="margin" aria-hidden="true"></div>
-  <header class="stamp">
-    <div>
-      <div class="kicker">Casebook 5110</div>
-      <h1>A rare event, read like a file.</h1>
-    </div>
-    <div class="stamp-box">Not a diagnostic<br>Holdout seed 42<br>Kaggle stroke file</div>
-  </header>
-  <main>
-    <section id="open">
-      <p class="folio">01 — The file</p>
-      <div class="lede" id="lede"></div>
-      <div class="age" id="age"></div>
-    </section>
-    <section id="models">
-      <p class="folio">02 — What beats a coin, and what does not</p>
-      <p class="prose">Accuracy is a trap: always guessing “no stroke” is right about 95% of the time and catches nobody. The table is the holdout. ROC is ranking. PR-AUC is the rare-event score. Brier is whether the number is a probability.</p>
-      <div class="split">
-        <table id="modelsTable"></table>
-        <svg id="roc" viewBox="0 0 420 320" role="img" aria-label="Holdout ROC curves"></svg>
-      </div>
-    </section>
-    <section id="point">
-      <p class="folio">03 — The desk threshold</p>
-      <p class="prose">The desk model is the <em>unweighted</em> logistic. A class-weighted score looks decisive and is not a risk. Move the cut. The holdout has 50 strokes in 1,022 rows.</p>
-      <label class="cut">Cut <input id="cut" type="range" min="0" max="1" step="1" /> <span id="cutLabel"></span></label>
-      <div class="flags" id="flags"></div>
-    </section>
-    <section id="burden">
-      <p class="folio">04 — Calibration and the sentence you can defend</p>
-      <div class="split">
-        <svg id="cal" viewBox="0 0 420 320" role="img" aria-label="Calibration of the unweighted logistic"></svg>
-        <table id="odds"></table>
-      </div>
-      <p class="prose" id="close"></p>
-    </section>
-  </main>
-  <footer>Educational casebook. Not for clinical use. ParBproject.</footer>
-  <script src="casebook/app.js"></script>
+  <p><a href="casebook/index.html">Stroke casebook</a></p>
 </body>
 </html>
