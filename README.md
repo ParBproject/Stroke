@@ -63,7 +63,7 @@ python3 -m http.server
 
 Then open `http://127.0.0.1:8000/`. Analysis dependencies are in `requirements.txt` (pandas, numpy, scikit-learn 1.9, statsmodels 0.15, pytest).
 
-`Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass. The Python casebook is the analysis this repository stands on.
+`archive/Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass, kept for the record. The [casebook](https://parbproject.github.io/Stroke/) is the analysis this repository stands on.
 
 ## Disclaimer
 
