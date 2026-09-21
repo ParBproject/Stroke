@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stroke casebook · ParBproject</title>
+  <meta name="description" content="Holdout casebook for the Kaggle stroke file. Not a diagnostic device.">
+  <link rel="stylesheet" href="casebook.css">
+  <script>
+    (function () {
+      var shot = new URLSearchParams(location.search).get("shot");
+      if (shot === "open" || shot === "models" || shot === "point" || shot === "burden") {
+        document.documentElement.dataset.shot = shot;
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="sheet">
+    <div class="holes" aria-hidden="true">
+      <span></span><span></span><span></span>
+    </div>
+    <header class="mast">
+      <div class="name-line">
+        <span>Name <b>ParBproject</b></span>
+        <span>Case <b>Kaggle 5110</b></span>
+        <span>Subject <b>stroke file</b></span>
+      </div>
+      <div class="stamp-row">
+        <p class="stamp">
+          <span>Casebook</span>
+          <span>Kaggle 5110</span>
+          <strong>Not a diagnostic</strong>
+        </p>
+        <div class="question">
+          <p class="kicker">Holdout notes · seed 42</p>
+          <h1>Who in this file has a stroke recorded?</h1>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="open">
+        <h2>The base rate</h2>
+        <div class="spread">
+          <div>
+            <p class="count" id="stroke-count">—</p>
+            <p class="count-sub" id="stroke-denom"></p>
+            <p class="prose" id="open-lede"></p>
+            <p class="margin-note" id="open-method"></p>
+          </div>
+          <figure>
+            <figcaption>Figure 1. Stroke rate by age, full file</figcaption>
+            <div id="age-strip" class="age-strip"></div>
+            <p class="caption" id="age-note"></p>
+          </figure>
+        </div>
+      </section>
+
+      <section id="models">
+        <h2>What beats age</h2>
+        <p class="prose" id="model-lede"></p>
+        <div class="compare">
+          <div>
+            <table>
+              <caption class="sr">Holdout metrics</caption>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>ROC</th>
+                  <th>PR</th>
+                  <th>Brier</th>
+                  <th>Recall @ 0.50</th>
+                </tr>
+              </thead>
+              <tbody id="model-body"></tbody>
+            </table>
+            <p class="footnote" id="weighted-note"></p>
+          </div>
+          <figure>
+            <figcaption>Figure 2. Holdout ROC</figcaption>
+            <svg id="roc" role="img" aria-label="ROC curves for the holdout models"></svg>
+            <div class="legend" id="roc-legend"></div>
+            <p class="caption">The gray diagonal is a coin flip. The red curve is the unweighted logistic, the desk model.</p>
+          </figure>
+        </div>
+      </section>
+
+      <section id="point">
+        <h2>A threshold, not 0.50</h2>
+        <p class="prose" id="point-lede"></p>
+        <div class="point-grid">
+          <div class="dial">
+            <p class="dial-kicker" id="threshold-tag"></p>
+            <p class="dial-value" id="threshold-value">—</p>
+            <label class="slider-label" for="threshold">Threshold on predicted risk</label>
+            <div class="slider-wrap">
+              <input id="threshold" type="range" min="0.02" max="0.50" step="0.01" value="0.11">
+              <span class="desk-mark" id="desk-mark"></span>
+            </div>
+            <p class="slider-scale"><span id="scale-min">0.02</span><span>0.50</span></p>
+          </div>
+          <div class="quad" id="quad" aria-live="polite"></div>
+        </div>
+        <p class="prose readout" id="point-readout"></p>
+      </section>
+
+      <section id="burden">
+        <h2>Calibration, odds, and the cost of a flag</h2>
+        <p class="tally-kicker" id="tally-kicker"></p>
+        <div class="tally" id="tally"></div>
+        <div class="burden-grid">
+          <figure>
+            <figcaption>Figure 3. Calibration of the desk model</figcaption>
+            <svg id="calibration" role="img" aria-label="Calibration of unweighted logistic probabilities"></svg>
+            <p class="caption" id="cal-note"></p>
+          </figure>
+          <div>
+            <table>
+              <caption class="sr">Odds ratios</caption>
+              <thead>
+                <tr>
+                  <th>Term</th>
+                  <th>Odds</th>
+                  <th>95% CI</th>
+                  <th>p</th>
+                </tr>
+              </thead>
+              <tbody id="odds-body"></tbody>
+            </table>
+            <p class="caption" id="odds-note"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>ParBproject · educational casebook</span>
+      <span id="footer-note">Not a diagnostic device</span>
+    </footer>
+    <p class="status" id="status">Opening metrics.json…</p>
+  </div>
+  <noscript>This page reads casebook/metrics.json. Enable JavaScript, or run python3 -m casebook.analyze and open the JSON.</noscript>
+  <script src="casebook.js"></script>
+</body>
+</html>

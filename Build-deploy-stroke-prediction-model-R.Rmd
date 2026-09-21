@@ -1,6 +1,6 @@
 ---
-title: "Build and deploy a stroke prediction model using R"
-author: "Put your name!"
+title: "Earlier R pass — maintained analysis is the Python casebook"
+author: "ParBproject"
 date: "`r Sys.Date()`"
 output:
   pdf_document: default
@@ -8,6 +8,8 @@ output:
 ---
 
 # About Data Analysis Report
+
+The maintained casebook is the Python page at the repository root (`index.html`, `casebook/analyze.py`). This R Markdown is an earlier pass and is not re-knit in CI.
 
 This RMarkdown file contains the report of the data analysis done for the project on building and deploying a stroke prediction model in R. It contains analysis such as data exploration, summary statistics and building the prediction models. The final report was completed on `r date()`. 
 
