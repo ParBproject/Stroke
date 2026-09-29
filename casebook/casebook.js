@@ -404,9 +404,11 @@
 
     renderModels(data);
     drawRoc(data.roc);
-    document.getElementById("point-lede").textContent =
-      "Probabilities come from the unweighted logistic. Among thresholds with sensitivity of at least 70%, the casebook keeps the one that flags the fewest people: " +
-      fixed(data.operating.threshold, 2) + ". The slider reads the precomputed grid, including ?t=0.15.";
+    var selectionNote = data.operating && data.operating.selection_note;
+    document.getElementById("point-lede").textContent = selectionNote
+      ? selectionNote
+      : "Probabilities come from the unweighted logistic. Among thresholds with sensitivity of at least 70%, the casebook keeps the one that flags the fewest people: " +
+        fixed(data.operating.threshold, 2) + ". The slider reads the precomputed grid, including ?t=0.15.";
 
     var input = document.getElementById("threshold");
     var grid = data.thresholds;
