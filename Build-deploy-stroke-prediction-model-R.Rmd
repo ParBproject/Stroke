@@ -172,6 +172,8 @@ if ("stroke" %in% names(stroke_data) & length(numeric_vars) > 0) {
 
 # Task Two: Build prediction models
 
+> This earlier pass fits a numeric median on the full file before `createDataPartition`, and later deploys whichever model wins on holdout AUC. Both steps use evaluation rows in the fitting or model choice. It is not re-run here: the file is unmaintained and is not part of CI. Read `casebook/analyze.py` for the leakage-safe pipeline.
+
 ```{r}
 # =========================
 # Task Two: Build Prediction Models (repaired)
