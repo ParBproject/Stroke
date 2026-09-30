@@ -1098,6 +1098,7 @@
     ]
   },
   "desk_model": "Logistic",
+  "thresholds_note": "Holdout classification at each cutoff of the refit unweighted logistic. Descriptive only. The operating threshold is threshold_selection.threshold, frozen before the holdout was scored.",
   "thresholds": [
     {
       "threshold": 0.02,
@@ -1835,27 +1836,41 @@
       "false_flags_per_true": 0.0
     }
   ],
-  "operating": {
-    "threshold": 0.11,
-    "tp": 35,
-    "fp": 125,
-    "tn": 847,
-    "fn": 15,
-    "sensitivity": 0.7,
-    "specificity": 0.8714,
-    "ppv": 0.2188,
-    "npv": 0.9826,
-    "f1": 0.3333,
-    "flagged": 160,
-    "flag_rate": 0.1566,
-    "false_flags_per_true": 3.57,
-    "per_1000": {
-      "flagged": 156.6,
-      "caught": 34.2,
-      "missed": 14.7,
-      "false_flags": 122.3
-    },
+  "threshold_selection": {
+    "source": "train_oof",
+    "folds": 5,
+    "seed": 42,
+    "labeled_rows": 4088,
+    "threshold": 0.06,
+    "oof_sensitivity": 0.7337,
+    "oof_specificity": 0.7701,
+    "oof_ppv": 0.1404,
+    "oof_flagged": 1040,
     "rule": "lowest flag count among thresholds with sensitivity >= 0.70"
+  },
+  "operating": {
+    "threshold": 0.06,
+    "tp": 40,
+    "fp": 217,
+    "tn": 755,
+    "fn": 10,
+    "sensitivity": 0.8,
+    "specificity": 0.7767,
+    "ppv": 0.1556,
+    "npv": 0.9869,
+    "f1": 0.2606,
+    "flagged": 257,
+    "flag_rate": 0.2515,
+    "false_flags_per_true": 5.42,
+    "per_1000": {
+      "flagged": 251.5,
+      "caught": 39.1,
+      "missed": 9.8,
+      "false_flags": 212.3
+    },
+    "selected_on": "train_oof",
+    "rule": "lowest flag count among thresholds with sensitivity >= 0.70; chosen on training out-of-fold scores, then scored once on the holdout",
+    "selection_note": "Probabilities are the unweighted logistic. Threshold 0.06 was frozen on stratified 5-fold scores from the training fold only: the lowest flag count among cutoffs with out-of-fold sensitivity at least 0.70. The holdout did not choose it. The slider reads the holdout grid, including ?t=0.15."
   },
   "calibration": [
     {

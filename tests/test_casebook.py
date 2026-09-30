@@ -4,12 +4,7 @@ import json
 
 import pytest
 
-from casebook.analyze import OUT, choose_operating, export
-
-
-@pytest.fixture(scope="module")
-def payload():
-    return export()
+from casebook.analyze import OUT, choose_operating
 
 
 def _models(payload):
@@ -68,15 +63,31 @@ def test_age_odds_ratio(payload):
     assert "Other" not in terms
 
 
-def test_operating_point_meets_sensitivity_when_possible(payload):
+def test_operating_point_is_frozen_on_training_oof(payload):
+    """The published cutoff is the training rule, scored once on the holdout."""
     grid = payload["thresholds"]
     assert any(abs(row["threshold"] - 0.15) < 1e-9 for row in grid)
-    if any(row["sensitivity"] >= 0.70 for row in grid):
-        assert payload["operating"]["sensitivity"] >= 0.70
-    expected = choose_operating(grid)
-    assert payload["operating"]["threshold"] == expected["threshold"]
-    assert payload["operating"]["flagged"] == expected["flagged"]
-    assert "per_1000" in payload["operating"]
+    selection = payload["threshold_selection"]
+    assert selection["source"] == "train_oof"
+    assert selection["folds"] == 5
+    assert selection["seed"] == 42
+    assert selection["labeled_rows"] == payload["dataset"]["train_rows"]
+    assert selection["labeled_rows"] != payload["dataset"]["test_rows"]
+    if selection["oof_sensitivity"] >= 0.70:
+        assert "sensitivity >= 0.70" in selection["rule"]
+    operating = payload["operating"]
+    assert operating["threshold"] == selection["threshold"]
+    assert operating["selected_on"] == "train_oof"
+    assert "holdout" in operating["rule"]
+    assert "training" in operating["selection_note"]
+    holdout_row = next(
+        row for row in grid if abs(row["threshold"] - operating["threshold"]) < 1e-9
+    )
+    assert operating["sensitivity"] == holdout_row["sensitivity"]
+    assert operating["tp"] == holdout_row["tp"]
+    assert operating["flagged"] == holdout_row["flagged"]
+    assert "per_1000" in operating
+    # The slider grid is not the selection set. Do not require holdout recall >= 0.70.
 
 
 def test_choose_operating_keeps_lowest_flag():
