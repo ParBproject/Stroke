@@ -39,18 +39,88 @@ def test_majority_recall_at_half_is_zero(payload):
 
 def test_age_and_unweighted_logistic(payload):
     models = _models(payload)
-    age = models["Age only"]["roc_auc"]
-    desk = models["Logistic"]["roc_auc"]
-    assert age > 0.75
-    assert desk >= age - 0.02
+    age = models["Age only"]
+    desk = models["Logistic"]
+    assert age["roc_auc"] > 0.75
+    assert desk["roc_auc"] >= age["roc_auc"] - 0.02
     assert payload["desk_model"] == "Logistic"
-    assert models["Logistic"]["scores_are_risks"] is True
+    assert age["scores_are_risks"] is True
+    assert desk["scores_are_risks"] is True
     assert models["Logistic, class-weighted"]["scores_are_risks"] is False
+    # Class-weighted age scores used to post a Brier near 0.17. That was not a probability.
+    assert age["brier"] < 0.06
+    assert abs(age["brier"] - desk["brier"]) < 0.01
+    assert age["at_half"]["sensitivity"] == 0
+    assert payload["desk_fit"]["penalty"] == "l2"
+    assert payload["desk_fit"]["C"] == 1.0
+    assert payload["desk_fit"]["class_weight"] is None
 
 
-def test_desk_calibration_is_not_the_weighted_pattern(payload):
-    top = payload["calibration"][-1]
-    assert not (top["mean_p"] > 0.8 and top["observed"] < 0.3)
+def test_holdout_intervals_match_the_counts(payload):
+    from casebook.analyze import wilson_interval
+
+    operating = payload["operating"]
+    assert operating["sensitivity_ci"] == wilson_interval(
+        operating["tp"], operating["tp"] + operating["fn"]
+    )
+    assert operating["specificity_ci"] == wilson_interval(
+        operating["tn"], operating["tn"] + operating["fp"]
+    )
+    assert operating["ppv_ci"] == wilson_interval(operating["tp"], operating["tp"] + operating["fp"])
+    assert operating["sensitivity_ci"][1] - operating["sensitivity_ci"][0] > 0.1
+    row = next(item for item in payload["thresholds"] if item["threshold"] == operating["threshold"])
+    assert row["sensitivity_ci"] == operating["sensitivity_ci"]
+
+
+def test_age_lift_is_interval_not_a_point(payload):
+    lift = payload["vs_age"]
+    assert "not refit" in lift["method"]
+    assert lift["resamples"] == 2000
+    assert lift["seed"] == 42
+    assert lift["roc_auc_ci"][0] <= lift["roc_auc"] <= lift["roc_auc_ci"][1]
+    assert lift["pr_auc_ci"][0] <= lift["pr_auc"] <= lift["pr_auc_ci"][1]
+    assert lift["brier_ci"][0] <= lift["brier"] <= lift["brier_ci"][1]
+    # Fifty holdout strokes do not separate the ROC curves. PR-AUC does move.
+    assert lift["roc_auc_ci"][0] <= 0 <= lift["roc_auc_ci"][1]
+    assert lift["pr_auc_ci"][0] > 0
+    models = _models(payload)
+    for name in ("Age only", "Logistic"):
+        model = models[name]
+        assert model["roc_auc_ci"][0] <= model["roc_auc"] <= model["roc_auc_ci"][1]
+        assert model["roc_auc_ci"][1] - model["roc_auc_ci"][0] > 0.05
+
+
+def test_calibration_resolves_the_operating_region(payload):
+    rows = payload["calibration"]
+    n = payload["dataset"]["test_rows"]
+    assert max(row["n"] for row in rows) < 0.5 * n
+    threshold = payload["operating"]["threshold"]
+    assert any(row["hi"] < threshold for row in rows)
+    assert any(row["lo"] <= threshold <= row["hi"] for row in rows)
+    for row in rows:
+        assert row["observed_ci"][0] <= row["observed"] <= row["observed_ci"][1]
+        assert "events" in row
+    summary = payload["calibration_summary"]
+    assert summary["scheme"] == "equal_count"
+    assert summary["adjusts_probabilities"] is False
+    assert summary["fit_on"] == "holdout"
+    assert summary["slope_ci"][0] <= summary["slope"] <= summary["slope_ci"][1]
+    assert summary["slope_ci"][0] < 1 < summary["slope_ci"][1]
+
+
+def test_odds_ratios_are_not_the_desk_model(payload):
+    meta = payload["association_model"]
+    assert meta["is_desk_model"] is False
+    assert meta["penalized"] is False
+    separation = meta["separation"]
+    assert separation["level"] == "Never_worked"
+    assert separation["train_strokes"] == 0
+    assert separation["train_rows"] > 0
+    assert "Never_worked" in payload["odds_design"]
+    assert "gender_Other" not in payload["odds_design"]
+    assert "those levels separated" not in payload["odds_design"]
+    terms = " ".join(row["term"] for row in payload["odds_ratios"])
+    assert "Work" not in terms
 
 
 def test_age_odds_ratio(payload):

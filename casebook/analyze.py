@@ -1,8 +1,8 @@
 """Holdout stroke-risk casebook.
 
-Train-only imputation, age-only and majority baselines, logistic odds ratios,
-tree and forest comparison, a threshold frozen on training out-of-fold scores,
-calibration on the holdout. Not a clinical tool.
+Train-only imputation, an unweighted age baseline, logistic odds ratios from a
+separate association model, tree and forest comparison, a threshold frozen on
+training out-of-fold scores, and holdout calibration. Not a clinical tool.
 """
 
 from __future__ import annotations
@@ -35,6 +35,11 @@ DATA = ROOT / "healthcare-dataset-stroke-data.csv"
 OUT = ROOT / "casebook" / "metrics.json"
 SEED = 42
 OOF_FOLDS = 5
+N_BOOT = 2000
+# Desk logistic is L2 (l1_ratio 0). C=1 is a light penalty at this sample size.
+# Stated explicitly so a later sklearn default cannot silently drop it.
+DESK_C = 1.0
+DESK_L1_RATIO = 0.0
 NUM = ["age", "avg_glucose_level", "bmi", "hypertension", "heart_disease"]
 CAT = ["gender", "ever_married", "work_type", "Residence_type", "smoking_status"]
 
@@ -85,15 +90,36 @@ def make_preprocessor(*, scale: bool) -> ColumnTransformer:
 
 
 def make_logistic(*, class_weight: str | None = None) -> Pipeline:
-    """Unweighted by default so predict_proba stays on a probability scale."""
-    kwargs = {"max_iter": 600, "solver": "lbfgs", "random_state": SEED}
-    if class_weight is not None:
-        kwargs["class_weight"] = class_weight
+    """L2-penalized logistic. Unweighted by default so scores stay probabilities."""
+    clf = LogisticRegression(
+        C=DESK_C,
+        l1_ratio=DESK_L1_RATIO,
+        max_iter=600,
+        solver="lbfgs",
+        random_state=SEED,
+        class_weight=class_weight,
+    )
     return Pipeline(
         [
             ("pre", make_preprocessor(scale=True)),
-            ("clf", LogisticRegression(**kwargs)),
+            ("clf", clf),
         ]
+    )
+
+
+def make_age_only() -> LogisticRegression:
+    """Unweighted age logistic.
+
+    A class-weighted age fit ranks the same single feature and then reports a
+    Brier and a recall-at-0.50 that are not probabilities. This baseline is a
+    probability, so those two numbers can sit next to the desk model.
+    """
+    return LogisticRegression(
+        C=DESK_C,
+        l1_ratio=DESK_L1_RATIO,
+        max_iter=400,
+        solver="lbfgs",
+        random_state=SEED,
     )
 
 
@@ -176,6 +202,27 @@ def age_bands(frame: pd.DataFrame) -> list[dict]:
     return rows
 
 
+def wilson_interval(successes: int, n: int, z: float = 1.96):
+    """Wilson score interval. None when the denominator is zero."""
+    if n <= 0:
+        return None
+    phat = successes / n
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    center = (phat + z2 / (2.0 * n)) / denom
+    margin = z * np.sqrt(phat * (1.0 - phat) / n + z2 / (4.0 * n * n)) / denom
+    lo = max(0.0, center - margin)
+    hi = min(1.0, center + margin)
+    point = round(phat, 4)
+    lo_r = min(round(lo, 4), point)
+    hi_r = max(round(hi, 4), point)
+    if lo_r == 0:
+        lo_r = 0.0
+    if hi_r == 0:
+        hi_r = 0.0
+    return [lo_r, hi_r]
+
+
 def classification_at(y_true, proba, threshold: float) -> dict:
     pred = (proba >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, pred, labels=[0, 1]).ravel()
@@ -192,8 +239,11 @@ def classification_at(y_true, proba, threshold: float) -> dict:
         "tn": int(tn),
         "fn": int(fn),
         "sensitivity": round(float(sens), 4),
+        "sensitivity_ci": wilson_interval(int(tp), int(tp + fn)),
         "specificity": round(float(spec), 4),
+        "specificity_ci": wilson_interval(int(tn), int(tn + fp)),
         "ppv": round(float(ppv), 4),
+        "ppv_ci": wilson_interval(int(tp), int(tp + fp)),
         "npv": round(float(npv), 4),
         "f1": round(float(f1), 4),
         "flagged": flagged,
@@ -214,27 +264,104 @@ def threshold_grid(y_true, proba) -> list[dict]:
     return rows
 
 
-def calibration(y_true, proba, bins: int = 8) -> list[dict]:
-    edges = np.linspace(0, 1, bins + 1)
+def calibration(y_true, proba, bins: int = 5) -> list[dict]:
+    """Equal-count bins on predicted risk.
+
+    Equal-width bins on [0, 1] put almost every row of this file into the
+    first bin, which also contains the operating threshold. Counts are split
+    on the sorted scores so that region is visible. The interval is a Wilson
+    interval on the bin's event count, not a claim that the bin is precise.
+    """
+    y_arr = np.asarray(y_true)
+    p_arr = np.asarray(proba, dtype=float)
+    order = np.argsort(p_arr, kind="mergesort")
     rows = []
-    for lo, hi in zip(edges[:-1], edges[1:]):
-        mask = (proba >= lo) & (proba < hi if hi < 1 else proba <= hi)
-        if mask.sum() == 0:
+    for group in np.array_split(order, bins):
+        if len(group) == 0:
             continue
+        pred = p_arr[group]
+        obs = y_arr[group]
+        events = int(obs.sum())
+        n = int(len(group))
+        observed = float(obs.mean()) if n else 0.0
         rows.append(
             {
-                "lo": round(float(lo), 2),
-                "hi": round(float(hi), 2),
-                "n": int(mask.sum()),
-                "mean_p": round(float(proba[mask].mean()), 4),
-                "observed": round(float(y_true[mask].mean()), 4),
+                "lo": json_float(pred.min(), 4),
+                "hi": json_float(pred.max(), 4),
+                "n": n,
+                "events": events,
+                "mean_p": json_float(pred.mean(), 4),
+                "observed": json_float(observed, 4),
+                "observed_ci": wilson_interval(events, n),
             }
         )
     return rows
 
 
+def calibration_summary(y_true, proba) -> dict:
+    """Holdout calibration slope. Does not rescale the published probabilities."""
+    p_arr = np.clip(np.asarray(proba, dtype=float), 1e-6, 1 - 1e-6)
+    logit = np.log(p_arr / (1.0 - p_arr))
+    design = sm.add_constant(logit, has_constant="add")
+    fit = sm.Logit(np.asarray(y_true), design).fit(disp=False, maxiter=200)
+    intercept, slope = (float(v) for v in fit.params)
+    se_i, se_s = (float(v) for v in fit.bse)
+
+    def ci(estimate: float, se: float):
+        return _ci_bounds(estimate, estimate - 1.96 * se, estimate + 1.96 * se, 3)
+
+    return {
+        "scheme": "equal_count",
+        "bins": 5,
+        "slope": round(slope, 3),
+        "slope_ci": ci(slope, se_s),
+        "intercept": round(intercept, 3),
+        "intercept_ci": ci(intercept, se_i),
+        "fit_on": "holdout",
+        "adjusts_probabilities": False,
+    }
+
+
+ASSOCIATION_NOTE = (
+    "Separate unpenalized logit on the training fold, not the coefficients of the desk model. "
+    "The desk logistic is L2-penalized (C=1) with work type and gender one-hot; those weights "
+    "are not reference-category odds ratios. "
+    "Covariates: age per 10 years, glucose per 10 mg/dL, BMI per 5, hypertension, heart disease, "
+    "married, urban, and smoking dummies against never smoked. "
+    "Work type is omitted because Never_worked has no strokes in the training fold and a dummy "
+    "separates. Gender is not in this table; the one Other row is dropped."
+)
+
+
+def association_meta(train_x: pd.DataFrame, train_y: pd.Series) -> dict:
+    """Why the odds-ratio table is not the desk model, and which level separates."""
+    never = train_x["work_type"].eq("Never_worked")
+    other = train_x["gender"].eq("Other")
+    return {
+        "family": "statsmodels Logit",
+        "sample": "training fold",
+        "penalized": False,
+        "is_desk_model": False,
+        "desk_penalty": "l2",
+        "desk_C": DESK_C,
+        "separation": {
+            "factor": "work_type",
+            "level": "Never_worked",
+            "train_rows": int(never.sum()),
+            "train_strokes": int(train_y.loc[never].sum()),
+            "reason": "complete_separation",
+        },
+        "dropped_rows": {
+            "rule": "gender == Other",
+            "rows": int(other.sum()),
+            "reason": "gender is not a term; the Other row is dropped so it is not a dummy",
+        },
+        "note": ASSOCIATION_NOTE,
+    }
+
+
 def odds_ratios(train_x: pd.DataFrame, train_y: pd.Series) -> list[dict]:
-    """Unweighted associations. Rare levels that separate are left out."""
+    """Unpenalized associations on the training fold. Not the desk model's coefficients."""
     work = train_x.copy()
     work["bmi"] = work["bmi"].fillna(work["bmi"].median())
     work = work[work["gender"] != "Other"]
@@ -361,6 +488,91 @@ def per_thousand(row: dict, n: int) -> dict:
     }
 
 
+def _clean_round(value: float, digits: int) -> float:
+    number = round(float(value), digits)
+    if number == 0:
+        return 0.0
+    return float(number)
+
+
+def _ci_bounds(point: float, lo: float, hi: float, digits: int) -> list:
+    """Round an interval and keep it closed around the published point."""
+    published = _clean_round(point, digits)
+    return [min(_clean_round(lo, digits), published), max(_clean_round(hi, digits), published)]
+
+
+def _quantile_ci(samples, point: float, digits: int) -> list:
+    lo, hi = np.quantile(np.asarray(samples, dtype=float), [0.025, 0.975])
+    return _ci_bounds(point, float(lo), float(hi), digits)
+
+
+def bootstrap_vs_age(y_true, age_p, log_p, n_boot: int = N_BOOT, seed: int = SEED) -> dict:
+    """Paired percentile intervals on the holdout. The models are not refit."""
+    y_arr = np.asarray(y_true)
+    age_p = np.asarray(age_p, dtype=float)
+    log_p = np.asarray(log_p, dtype=float)
+    rng = np.random.default_rng(seed)
+    n = len(y_arr)
+    buckets = {key: [] for key in ("age_roc", "log_roc", "age_pr", "log_pr", "age_br", "log_br", "d_roc", "d_pr", "d_br")}
+    kept = 0
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        y = y_arr[idx]
+        if y.min() == y.max():
+            continue
+        kept += 1
+        a_roc = float(roc_auc_score(y, age_p[idx]))
+        l_roc = float(roc_auc_score(y, log_p[idx]))
+        a_pr = float(average_precision_score(y, age_p[idx]))
+        l_pr = float(average_precision_score(y, log_p[idx]))
+        a_br = float(brier_score_loss(y, age_p[idx]))
+        l_br = float(brier_score_loss(y, log_p[idx]))
+        buckets["age_roc"].append(a_roc)
+        buckets["log_roc"].append(l_roc)
+        buckets["age_pr"].append(a_pr)
+        buckets["log_pr"].append(l_pr)
+        buckets["age_br"].append(a_br)
+        buckets["log_br"].append(l_br)
+        buckets["d_roc"].append(l_roc - a_roc)
+        buckets["d_pr"].append(l_pr - a_pr)
+        buckets["d_br"].append(l_br - a_br)
+    age_roc = float(roc_auc_score(y_arr, age_p))
+    log_roc = float(roc_auc_score(y_arr, log_p))
+    age_pr = float(average_precision_score(y_arr, age_p))
+    log_pr = float(average_precision_score(y_arr, log_p))
+    age_br = float(brier_score_loss(y_arr, age_p))
+    log_br = float(brier_score_loss(y_arr, log_p))
+    roc_lift = _clean_round(log_roc - age_roc, 3)
+    pr_lift = _clean_round(log_pr - age_pr, 3)
+    brier_lift = _clean_round(log_br - age_br, 3)
+    return {
+        "age": {
+            "roc_auc_ci": _quantile_ci(buckets["age_roc"], age_roc, 3),
+            "pr_auc_ci": _quantile_ci(buckets["age_pr"], age_pr, 3),
+            "brier_ci": _quantile_ci(buckets["age_br"], age_br, 3),
+        },
+        "logistic": {
+            "roc_auc_ci": _quantile_ci(buckets["log_roc"], log_roc, 3),
+            "pr_auc_ci": _quantile_ci(buckets["log_pr"], log_pr, 3),
+            "brier_ci": _quantile_ci(buckets["log_br"], log_br, 3),
+        },
+        "vs_age": {
+            "reference": "Age only",
+            "comparison": "Logistic",
+            "resamples": n_boot,
+            "resamples_kept": kept,
+            "seed": seed,
+            "method": "paired percentile bootstrap of holdout rows; models are not refit",
+            "roc_auc": roc_lift,
+            "roc_auc_ci": _ci_bounds(roc_lift, *np.quantile(buckets["d_roc"], [0.025, 0.975]), 3),
+            "pr_auc": pr_lift,
+            "pr_auc_ci": _ci_bounds(pr_lift, *np.quantile(buckets["d_pr"], [0.025, 0.975]), 3),
+            "brier": brier_lift,
+            "brier_ci": _ci_bounds(brier_lift, *np.quantile(buckets["d_br"], [0.025, 0.975]), 3),
+        },
+    }
+
+
 def score_model(name: str, y_true, proba, *, scores_are_risks: bool) -> dict:
     return {
         "name": name,
@@ -383,9 +595,7 @@ def build() -> dict:
     y = test_y.to_numpy()
 
     majority_p = np.full(len(y), float(train_y.mean()))
-    age_only = LogisticRegression(
-        max_iter=400, solver="lbfgs", class_weight="balanced", random_state=SEED
-    )
+    age_only = make_age_only()
     age_med = float(train_x["age"].median())
     age_only.fit(train_x[["age"]].fillna(age_med), train_y)
     age_p = age_only.predict_proba(test_x[["age"]].fillna(age_med))[:, 1]
@@ -437,13 +647,18 @@ def build() -> dict:
         "Decision tree": tree_p,
         "Random forest": forest_p,
     }
-    risk_models = {"Majority rate", "Logistic"}
+    risk_models = {"Majority rate", "Age only", "Logistic"}
     models = []
     for name, proba in probas.items():
         row = score_model(name, y, proba, scores_are_risks=name in risk_models)
         fpr, tpr, _ = roc_curve(y, proba)
         curves[name] = downsample_curve(fpr, tpr)
         models.append(row)
+
+    uncertainty = bootstrap_vs_age(y, age_p, log_p)
+    by_name = {row["name"]: row for row in models}
+    by_name["Age only"].update(uncertainty["age"])
+    by_name["Logistic"].update(uncertainty["logistic"])
 
     # Desk probabilities are unweighted. Class weights rank well and calibrate badly.
     # The cutoff is frozen on training out-of-fold scores. The holdout grid is
@@ -504,21 +719,26 @@ def build() -> dict:
         "thresholds_note": (
             "Holdout classification at each cutoff of the refit unweighted logistic. "
             "Descriptive only. The operating threshold is threshold_selection.threshold, "
-            "frozen before the holdout was scored."
+            "frozen before the holdout was scored. "
+            "sensitivity_ci, specificity_ci, and ppv_ci are Wilson intervals on these holdout counts."
         ),
         "thresholds": grid,
         "threshold_selection": selection,
         "operating": operating,
+        "vs_age": uncertainty["vs_age"],
         "calibration": calibration(y, desk_p),
+        "calibration_summary": calibration_summary(y, desk_p),
         "brier_desk": round(float(brier_score_loss(y, desk_p)), 3),
         "odds_ratios": odds_ratios(train_x, train_y),
-        "odds_design": (
-            "Unweighted statsmodels Logit on the training fold. "
-            "Age per 10 years, glucose per 10 mg/dL, BMI per 5, hypertension, "
-            "heart disease, married, urban, smoking dummies. "
-            "gender == Other dropped. work_type and gender_Other omitted; "
-            "those levels separated and produced infinite confidence intervals."
-        ),
+        "association_model": association_meta(train_x, train_y),
+        "odds_design": ASSOCIATION_NOTE,
+        "desk_fit": {
+            "estimator": "LogisticRegression",
+            "penalty": "l2",
+            "C": DESK_C,
+            "l1_ratio": DESK_L1_RATIO,
+            "class_weight": None,
+        },
         "note": (
             "Educational casebook on the Kaggle stroke file. "
             "Not a diagnostic device and not validated for clinical use."
@@ -563,6 +783,22 @@ def _print_report(result: dict) -> None:
         f"holdout at frozen threshold {op['threshold']:.2f}  "
         f"sens {op['sensitivity']:.3f}  spec {op['specificity']:.3f}  "
         f"ppv {op['ppv']:.3f}  false_flags/true {op['false_flags_per_true']}"
+    )
+    sens = op["sensitivity_ci"]
+    print(
+        f"holdout sensitivity Wilson CI {sens[0]:.4f}–{sens[1]:.4f}  "
+        f"ppv CI {op['ppv_ci'][0]:.4f}–{op['ppv_ci'][1]:.4f}"
+    )
+    lift = result["vs_age"]
+    print(
+        f"vs unweighted age  ROC {lift['roc_auc']:+.3f} {lift['roc_auc_ci']}  "
+        f"PR {lift['pr_auc']:+.3f} {lift['pr_auc_ci']}  "
+        f"Brier {lift['brier']:+.3f} {lift['brier_ci']}"
+    )
+    slope = result["calibration_summary"]
+    print(
+        f"calibration slope {slope['slope']:.3f} {slope['slope_ci']}  "
+        f"intercept {slope['intercept']:.3f} (probabilities not rescaled)"
     )
     print(
         "per 1000: "
