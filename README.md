@@ -66,7 +66,7 @@ python3 -m http.server
 
 Then open `http://127.0.0.1:8000/`. Dependencies are pinned in `requirements.txt` (pandas 3.0.6, numpy 2.5.3, scikit-learn 1.9.1, scipy 1.18.1, statsmodels 0.15.0, pytest 9.1.1). The same thread limits are set in CI.
 
-`Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass. It imputes medians before the split and picks a model by holdout AUC. Those numbers are not reproduced here. The Python casebook is the analysis this repository stands on.
+`archive/Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass, kept for the record. It imputes medians before the split and picks a model by holdout AUC. Those numbers are not reproduced here. The Python casebook is the analysis this repository stands on.
 
 ## Disclaimer
 
