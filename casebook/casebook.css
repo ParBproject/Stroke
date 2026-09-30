@@ -430,6 +430,17 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1;
   letter-spacing: -0.03em;
 }
+.quad em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--soft);
+}
+#model-lede { max-width: 66rem; }
 .tally strong { font-size: 36px; }
 .tally-kicker {
   margin: 0;
