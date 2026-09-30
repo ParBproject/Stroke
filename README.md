@@ -10,7 +10,7 @@ Can a simple model flag people in this file who have a stroke recorded, without 
 
 ## Method
 
-The split comes first. A stratified 80/20 holdout, seed 42, is cut before any imputation. Missing BMI (201 rows) is filled with the **training** median (28.0). The full-file median is 28.1 and is not used.
+The split comes first. A stratified 80/20 holdout, seed 42, is cut before any imputation, scaling, or encoding. Missing BMI (201 rows) is filled with the **training** median (28.0) inside the pipeline. The full-file median is 28.1 and is not used. The training fold is not resampled.
 
 Five scores are compared on the holdout:
 
@@ -24,7 +24,7 @@ Five scores are compared on the holdout:
 
 A class-weighted logistic is fit only as a ranking footnote. Its scores are not risks, and 0.50 on that model is not a 50% chance.
 
-ROC-AUC describes ranking. PR-AUC is the rare-event metric: the majority model’s PR-AUC sits on the ~4.9% base rate. The operating point is read from the unweighted logistic only: the lowest-flag threshold whose sensitivity is at least 0.70.
+ROC-AUC describes ranking. PR-AUC is the rare-event metric: the majority model’s PR-AUC sits on the ~4.9% base rate. The operating threshold is frozen on the training fold only. Stratified 5-fold out-of-fold probabilities from the unweighted logistic are swept from 0.02 to 0.50, and the cutoff is the lowest-flag point whose out-of-fold sensitivity is at least 0.70. The logistic is then refit on the full training fold and that cutoff is applied once to the holdout. The slider is a description of the holdout grid, including `?t=0.15`. It does not choose the cutoff.
 
 Odds ratios are a separate unweighted logit on the training fold (age per 10 years, glucose per 10 mg/dL, BMI per 5, hypertension, heart disease, married, urban, smoking). `gender == Other` is dropped. Work type is omitted because those levels separated and produced infinite intervals.
 
@@ -37,8 +37,9 @@ Numbers are from `casebook/metrics.json` (seed 42).
 - ROC-AUC: majority **0.500**, age only **0.834**, unweighted logistic **0.842**, tree **0.831**, forest **0.838**. The full logistic only modestly beats age.
 - PR-AUC: majority **0.049**, age only **0.197**, unweighted logistic **0.271**, forest **0.254**.
 - Brier: unweighted logistic **0.041**, majority **0.047**. The class-weighted logistic’s Brier is **0.168** with ROC **0.844**. Similar rank, not a probability.
-- Operating threshold **0.11** (sensitivity **0.70**, specificity **0.871**, PPV **0.219**, **3.57** false flags per true stroke).
-- Per 1,000 people like the holdout, that threshold flags **156.6**, catches **34.2**, misses **14.7**, and raises **122.3** false flags.
+- Operating threshold **0.06**, frozen on training out-of-fold scores (out-of-fold sensitivity **0.7337**, specificity **0.7701**, PPV **0.1404**, 1,040 of 4,088 training rows flagged). On the holdout that cutoff has sensitivity **0.80** (40 / 50), specificity **0.7767**, PPV **0.1556**, and **5.42** false flags per true stroke.
+- Per 1,000 people like the holdout, that threshold flags **251.5**, catches **39.1**, misses **9.8**, and raises **212.3** false flags.
+- Choosing the same rule on the holdout instead freezes **0.11** (sensitivity **0.70**, specificity **0.8714**, PPV **0.2188**, **3.57** false flags per true stroke; per 1,000: flagged **156.6**, caught **34.2**, missed **14.7**, false flags **122.3**). That is what this page used to publish. It uses the evaluation labels to pick the cutoff, so it is not the operating point.
 - Age odds ratio **2.04** per 10 years (95% CI **1.81–2.30**). Hypertension **1.58**. Glucose **1.04** per 10 mg/dL. BMI, after age, is about **1.00**.
 
 ## Casebook
@@ -56,14 +57,15 @@ The live page is `casebook/index.html` (the repository root redirects there, inc
 ## Run
 
 ```bash
-python3 -m casebook.analyze
+python3 -m pip install -r requirements.txt
+PYTHONHASHSEED=42 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python3 -m casebook.analyze
 pytest -q
 python3 -m http.server
 ```
 
-Then open `http://127.0.0.1:8000/`. Analysis dependencies are in `requirements.txt` (pandas, numpy, scikit-learn 1.9, statsmodels 0.15, pytest).
+Then open `http://127.0.0.1:8000/`. Dependencies are pinned in `requirements.txt` (pandas 3.0.6, numpy 2.5.3, scikit-learn 1.9.1, scipy 1.18.1, statsmodels 0.15.0, pytest 9.1.1). The same thread limits are set in CI.
 
-`Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass. The Python casebook is the analysis this repository stands on.
+`Build-deploy-stroke-prediction-model-R.Rmd` is an earlier unmaintained pass. It imputes medians before the split and picks a model by holdout AUC. Those numbers are not reproduced here. The Python casebook is the analysis this repository stands on.
 
 ## Disclaimer
 

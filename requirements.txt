@@ -1,5 +1,8 @@
-pandas>=2.2
-numpy>=1.26
-scikit-learn>=1.9,<2
-statsmodels>=0.15,<0.16
-pytest>=8
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+scipy==1.18.1
+statsmodels==0.15.0
+patsy==1.0.3
+pytest==9.1.1
+threadpoolctl==3.7.0

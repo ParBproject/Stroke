@@ -1,7 +1,8 @@
 """Holdout stroke-risk casebook.
 
 Train-only imputation, age-only and majority baselines, logistic odds ratios,
-tree and forest comparison, threshold sweep, calibration. Not a clinical tool.
+tree and forest comparison, a threshold frozen on training out-of-fold scores,
+calibration on the holdout. Not a clinical tool.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -23,7 +25,7 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
@@ -32,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "healthcare-dataset-stroke-data.csv"
 OUT = ROOT / "casebook" / "metrics.json"
 SEED = 42
+OOF_FOLDS = 5
 NUM = ["age", "avg_glucose_level", "bmi", "hypertension", "heart_disease"]
 CAT = ["gender", "ever_married", "work_type", "Residence_type", "smoking_status"]
 
@@ -77,6 +80,19 @@ def make_preprocessor(*, scale: bool) -> ColumnTransformer:
                 ),
                 CAT,
             ),
+        ]
+    )
+
+
+def make_logistic(*, class_weight: str | None = None) -> Pipeline:
+    """Unweighted by default so predict_proba stays on a probability scale."""
+    kwargs = {"max_iter": 600, "solver": "lbfgs", "random_state": SEED}
+    if class_weight is not None:
+        kwargs["class_weight"] = class_weight
+    return Pipeline(
+        [
+            ("pre", make_preprocessor(scale=True)),
+            ("clf", LogisticRegression(**kwargs)),
         ]
     )
 
@@ -274,14 +290,66 @@ def odds_ratios(train_x: pd.DataFrame, train_y: pd.Series) -> list[dict]:
 
 
 def choose_operating(grid: list[dict]) -> dict:
-    """Lowest-flag threshold that still catches at least 70% of holdout strokes.
+    """Lowest-flag threshold with sensitivity at least 0.70 on these rows.
 
     If no grid point reaches that sensitivity, fall back to the best F1.
+    Pass training out-of-fold rows. Passing the holdout tunes the cutoff
+    on the same labels used to report it.
     """
     eligible = [row for row in grid if row["sensitivity"] >= 0.70]
     if eligible:
         return min(eligible, key=lambda row: (row["flagged"], -row["threshold"]))
     return max(grid, key=lambda row: (row["f1"], -row["flagged"]))
+
+
+def threshold_from_training(train_x: pd.DataFrame, train_y: pd.Series) -> tuple[float, dict]:
+    """Freeze a cutoff from stratified out-of-fold scores on the training fold.
+
+    Each fold fits imputation, scaling, and the logistic only on its fit rows.
+    The desk model is refit later on the full training fold; this function
+    never sees holdout rows.
+    """
+    scores = np.zeros(len(train_y), dtype=float)
+    labels = train_y.to_numpy()
+    cv = StratifiedKFold(n_splits=OOF_FOLDS, shuffle=True, random_state=SEED)
+    for fit_idx, valid_idx in cv.split(train_x, labels):
+        fold = clone(make_logistic())
+        fold.fit(train_x.iloc[fit_idx], train_y.iloc[fit_idx])
+        scores[valid_idx] = fold.predict_proba(train_x.iloc[valid_idx])[:, 1]
+    chosen = choose_operating(threshold_grid(labels, scores))
+    reached = chosen["sensitivity"] >= 0.70
+    rule = (
+        "lowest flag count among thresholds with sensitivity >= 0.70"
+        if reached
+        else "best F1; no training out-of-fold threshold reached sensitivity 0.70"
+    )
+    record = {
+        "source": "train_oof",
+        "folds": OOF_FOLDS,
+        "seed": SEED,
+        "labeled_rows": int(len(train_y)),
+        "threshold": chosen["threshold"],
+        "oof_sensitivity": chosen["sensitivity"],
+        "oof_specificity": chosen["specificity"],
+        "oof_ppv": chosen["ppv"],
+        "oof_flagged": chosen["flagged"],
+        "rule": rule,
+    }
+    return float(chosen["threshold"]), record
+
+
+def selection_note(threshold: float, *, reached: bool) -> str:
+    if reached:
+        how = (
+            "the lowest flag count among cutoffs with out-of-fold sensitivity at least 0.70"
+        )
+    else:
+        how = "the best out-of-fold F1, because no cutoff reached sensitivity 0.70"
+    return (
+        f"Probabilities are the unweighted logistic. Threshold {threshold:.2f} was frozen on "
+        f"stratified {OOF_FOLDS}-fold scores from the training fold only: {how}. "
+        "The holdout did not choose it. The slider reads the holdout grid, including ?t=0.15."
+    )
 
 
 def per_thousand(row: dict, n: int) -> dict:
@@ -315,23 +383,15 @@ def build() -> dict:
     y = test_y.to_numpy()
 
     majority_p = np.full(len(y), float(train_y.mean()))
-    age_only = LogisticRegression(max_iter=400, class_weight="balanced")
+    age_only = LogisticRegression(
+        max_iter=400, solver="lbfgs", class_weight="balanced", random_state=SEED
+    )
     age_med = float(train_x["age"].median())
     age_only.fit(train_x[["age"]].fillna(age_med), train_y)
     age_p = age_only.predict_proba(test_x[["age"]].fillna(age_med))[:, 1]
 
-    logistic = Pipeline(
-        [
-            ("pre", make_preprocessor(scale=True)),
-            ("clf", LogisticRegression(max_iter=600)),
-        ]
-    )
-    logistic_balanced = Pipeline(
-        [
-            ("pre", make_preprocessor(scale=True)),
-            ("clf", LogisticRegression(max_iter=600, class_weight="balanced")),
-        ]
-    )
+    logistic = make_logistic()
+    logistic_balanced = make_logistic(class_weight="balanced")
     tree = Pipeline(
         [
             ("pre", make_preprocessor(scale=False)),
@@ -386,16 +446,21 @@ def build() -> dict:
         models.append(row)
 
     # Desk probabilities are unweighted. Class weights rank well and calibrate badly.
+    # The cutoff is frozen on training out-of-fold scores. The holdout grid is
+    # the slider only; it does not choose the operating point.
     desk = "Logistic"
     desk_p = log_p
+    frozen, selection = threshold_from_training(train_x, train_y)
     grid = threshold_grid(y, desk_p)
-    operating = dict(choose_operating(grid))
+    operating = dict(classification_at(y, desk_p, frozen))
     n = len(y)
     operating["per_1000"] = per_thousand(operating, n)
+    operating["selected_on"] = selection["source"]
     operating["rule"] = (
-        "lowest flag count among thresholds with sensitivity >= 0.70"
-        if operating["sensitivity"] >= 0.70
-        else "best F1; no grid threshold reached sensitivity 0.70"
+        selection["rule"] + "; chosen on training out-of-fold scores, then scored once on the holdout"
+    )
+    operating["selection_note"] = selection_note(
+        frozen, reached=selection["oof_sensitivity"] >= 0.70
     )
 
     bmi_index = NUM.index("bmi")
@@ -436,7 +501,13 @@ def build() -> dict:
         "models": models,
         "roc": curves,
         "desk_model": desk,
+        "thresholds_note": (
+            "Holdout classification at each cutoff of the refit unweighted logistic. "
+            "Descriptive only. The operating threshold is threshold_selection.threshold, "
+            "frozen before the holdout was scored."
+        ),
         "thresholds": grid,
+        "threshold_selection": selection,
         "operating": operating,
         "calibration": calibration(y, desk_p),
         "brier_desk": round(float(brier_score_loss(y, desk_p)), 3),
@@ -481,8 +552,15 @@ def _print_report(result: dict) -> None:
         )
     op = result["operating"]
     burden = op["per_1000"]
+    selected = result["threshold_selection"]
     print(
-        f"operating threshold {op['threshold']:.2f}  "
+        f"threshold frozen on train OOF ({selected['folds']}-fold, n={selected['labeled_rows']}) "
+        f"{selected['threshold']:.2f}  oof sens {selected['oof_sensitivity']:.3f}  "
+        f"oof spec {selected['oof_specificity']:.3f}  oof ppv {selected['oof_ppv']:.3f}  "
+        f"oof flagged {selected['oof_flagged']}"
+    )
+    print(
+        f"holdout at frozen threshold {op['threshold']:.2f}  "
         f"sens {op['sensitivity']:.3f}  spec {op['specificity']:.3f}  "
         f"ppv {op['ppv']:.3f}  false_flags/true {op['false_flags_per_true']}"
     )
