@@ -8,6 +8,18 @@ A holdout study of the [Kaggle stroke prediction file](https://www.kaggle.com/da
 
 Can a simple model flag people in this file who have a stroke recorded, without pretending that accuracy or a 0.50 cutoff is a clinical risk?
 
+## Data provenance
+
+| | |
+|---|---|
+| File | `healthcare-dataset-stroke-data.csv`, committed to this repo on 2025-09-08 |
+| Source | [Stroke Prediction Dataset](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset) by fedesoriano on Kaggle, last updated 2021-01-26 |
+| Shape | 5,110 rows, 12 columns (id, 10 attributes and the `stroke` label); 201 missing BMI values |
+| Integrity | SHA-256 `644d473b05d2797006bd94865e4f8bb057f0c721617911613c82c8fcfc707420`; 316,971 bytes, the same size Kaggle reports for the dataset |
+| Origin of the records | Not documented. The Kaggle page lists the source as "Confidential Source" |
+| License / terms | Kaggle lists "Data files © Original Authors" and asks for "educational purposes only" use, with credit to the author. This repo uses it only as an educational casebook |
+| Caveat | The population, collection period and the definition of "stroke recorded" are unknown, so results do not generalise to any real clinical population |
+
 ## Method
 
 The split comes first. A stratified 80/20 holdout, seed 42, is cut before any imputation, scaling, or encoding. Missing BMI (201 rows) is filled with the **training** median (28.0) inside the pipeline. The full-file median is 28.1 and is not used. The training fold is not resampled.
