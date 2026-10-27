@@ -1,8 +1,7 @@
-"""Holdout stroke-risk casebook.
+"""Holdout metrics for the Kaggle stroke file.
 
-Train-only imputation, an unweighted age baseline, logistic odds ratios from a
-separate association model, tree and forest comparison, a threshold frozen on
-training out-of-fold scores, and holdout calibration. Not a clinical tool.
+Split first, impute on the training fold, and freeze the threshold on
+training scores. Not a clinical tool.
 """
 
 from __future__ import annotations
@@ -36,8 +35,7 @@ OUT = ROOT / "casebook" / "metrics.json"
 SEED = 42
 OOF_FOLDS = 5
 N_BOOT = 2000
-# Desk logistic is L2 (l1_ratio 0). C=1 is a light penalty at this sample size.
-# Stated explicitly so a later sklearn default cannot silently drop it.
+# L2, C=1. Pin both so a later sklearn default does not change the fit.
 DESK_C = 1.0
 DESK_L1_RATIO = 0.0
 NUM = ["age", "avg_glucose_level", "bmi", "hypertension", "heart_disease"]
@@ -90,7 +88,7 @@ def make_preprocessor(*, scale: bool) -> ColumnTransformer:
 
 
 def make_logistic(*, class_weight: str | None = None) -> Pipeline:
-    """L2-penalized logistic. Unweighted by default so scores stay probabilities."""
+    """L2 logistic. Unweighted by default, so the scores are probabilities."""
     clf = LogisticRegression(
         C=DESK_C,
         l1_ratio=DESK_L1_RATIO,
@@ -108,12 +106,7 @@ def make_logistic(*, class_weight: str | None = None) -> Pipeline:
 
 
 def make_age_only() -> LogisticRegression:
-    """Unweighted age logistic.
-
-    A class-weighted age fit ranks the same single feature and then reports a
-    Brier and a recall-at-0.50 that are not probabilities. This baseline is a
-    probability, so those two numbers can sit next to the desk model.
-    """
+    """Unweighted logistic on age. The scores are probabilities, so Brier is comparable."""
     return LogisticRegression(
         C=DESK_C,
         l1_ratio=DESK_L1_RATIO,
@@ -140,7 +133,7 @@ def json_float(value, digits: int = 4):
 
 
 def json_p(value):
-    """Keep tiny p-values from collapsing to 0.0."""
+    """Format a p-value without rounding a tiny one to 0."""
     if value is None:
         return None
     number = float(value)
@@ -203,7 +196,7 @@ def age_bands(frame: pd.DataFrame) -> list[dict]:
 
 
 def wilson_interval(successes: int, n: int, z: float = 1.96):
-    """Wilson score interval. None when the denominator is zero."""
+    """Wilson interval. None when n is 0."""
     if n <= 0:
         return None
     phat = successes / n
@@ -253,11 +246,7 @@ def classification_at(y_true, proba, threshold: float) -> dict:
 
 
 def threshold_grid(y_true, proba) -> list[dict]:
-    """Risk thresholds on the unweighted logistic scale.
-
-    Predicted risks on this file mostly sit below 0.50, so the grid stops there.
-    Step 0.01 keeps a query such as ?t=0.15 on a real grid point.
-    """
+    """Cutoffs from 0.02 to 0.50, step 0.01. Most scores on this file sit below 0.50."""
     rows = []
     for threshold in np.round(np.arange(0.02, 0.501, 0.01), 2):
         rows.append(classification_at(y_true, proba, float(threshold)))
@@ -265,13 +254,7 @@ def threshold_grid(y_true, proba) -> list[dict]:
 
 
 def calibration(y_true, proba, bins: int = 5) -> list[dict]:
-    """Equal-count bins on predicted risk.
-
-    Equal-width bins on [0, 1] put almost every row of this file into the
-    first bin, which also contains the operating threshold. Counts are split
-    on the sorted scores so that region is visible. The interval is a Wilson
-    interval on the bin's event count, not a claim that the bin is precise.
-    """
+    """Equal-count bins of predicted risk. Equal-width bins would pile this file into the first bin."""
     y_arr = np.asarray(y_true)
     p_arr = np.asarray(proba, dtype=float)
     order = np.argsort(p_arr, kind="mergesort")
@@ -299,7 +282,7 @@ def calibration(y_true, proba, bins: int = 5) -> list[dict]:
 
 
 def calibration_summary(y_true, proba) -> dict:
-    """Holdout calibration slope. Does not rescale the published probabilities."""
+    """Calibration slope on the holdout. Does not change the published probabilities."""
     p_arr = np.clip(np.asarray(proba, dtype=float), 1e-6, 1 - 1e-6)
     logit = np.log(p_arr / (1.0 - p_arr))
     design = sm.add_constant(logit, has_constant="add")
@@ -334,7 +317,7 @@ ASSOCIATION_NOTE = (
 
 
 def association_meta(train_x: pd.DataFrame, train_y: pd.Series) -> dict:
-    """Why the odds-ratio table is not the desk model, and which level separates."""
+    """Record that the odds ratios are a separate logit, and which level separates."""
     never = train_x["work_type"].eq("Never_worked")
     other = train_x["gender"].eq("Other")
     return {
@@ -361,7 +344,7 @@ def association_meta(train_x: pd.DataFrame, train_y: pd.Series) -> dict:
 
 
 def odds_ratios(train_x: pd.DataFrame, train_y: pd.Series) -> list[dict]:
-    """Unpenalized associations on the training fold. Not the desk model's coefficients."""
+    """Unpenalized logit on the training fold. Not the desk model's coefficients."""
     work = train_x.copy()
     work["bmi"] = work["bmi"].fillna(work["bmi"].median())
     work = work[work["gender"] != "Other"]
@@ -417,11 +400,10 @@ def odds_ratios(train_x: pd.DataFrame, train_y: pd.Series) -> list[dict]:
 
 
 def choose_operating(grid: list[dict]) -> dict:
-    """Lowest-flag threshold with sensitivity at least 0.70 on these rows.
+    """Lowest-flag cutoff with sensitivity at least 0.70, else the best F1.
 
-    If no grid point reaches that sensitivity, fall back to the best F1.
-    Pass training out-of-fold rows. Passing the holdout tunes the cutoff
-    on the same labels used to report it.
+    Pass training out-of-fold rows. The holdout would tune the cutoff on the
+    labels used to report it.
     """
     eligible = [row for row in grid if row["sensitivity"] >= 0.70]
     if eligible:
@@ -430,12 +412,7 @@ def choose_operating(grid: list[dict]) -> dict:
 
 
 def threshold_from_training(train_x: pd.DataFrame, train_y: pd.Series) -> tuple[float, dict]:
-    """Freeze a cutoff from stratified out-of-fold scores on the training fold.
-
-    Each fold fits imputation, scaling, and the logistic only on its fit rows.
-    The desk model is refit later on the full training fold; this function
-    never sees holdout rows.
-    """
+    """Pick the cutoff from training out-of-fold scores. Does not see the holdout."""
     scores = np.zeros(len(train_y), dtype=float)
     labels = train_y.to_numpy()
     cv = StratifiedKFold(n_splits=OOF_FOLDS, shuffle=True, random_state=SEED)
@@ -496,7 +473,7 @@ def _clean_round(value: float, digits: int) -> float:
 
 
 def _ci_bounds(point: float, lo: float, hi: float, digits: int) -> list:
-    """Round an interval and keep it closed around the published point."""
+    """Round an interval so it still contains the published point."""
     published = _clean_round(point, digits)
     return [min(_clean_round(lo, digits), published), max(_clean_round(hi, digits), published)]
 
@@ -507,7 +484,7 @@ def _quantile_ci(samples, point: float, digits: int) -> list:
 
 
 def bootstrap_vs_age(y_true, age_p, log_p, n_boot: int = N_BOOT, seed: int = SEED) -> dict:
-    """Paired percentile intervals on the holdout. The models are not refit."""
+    """Paired percentile intervals on the holdout rows. The fitted models stay fixed."""
     y_arr = np.asarray(y_true)
     age_p = np.asarray(age_p, dtype=float)
     log_p = np.asarray(log_p, dtype=float)
@@ -660,9 +637,7 @@ def build() -> dict:
     by_name["Age only"].update(uncertainty["age"])
     by_name["Logistic"].update(uncertainty["logistic"])
 
-    # Desk probabilities are unweighted. Class weights rank well and calibrate badly.
-    # The cutoff is frozen on training out-of-fold scores. The holdout grid is
-    # the slider only; it does not choose the operating point.
+    # Unweighted logistic. The cutoff comes from training scores; the holdout grid is only the slider.
     desk = "Logistic"
     desk_p = log_p
     frozen, selection = threshold_from_training(train_x, train_y)

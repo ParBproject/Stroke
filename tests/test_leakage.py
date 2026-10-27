@@ -1,7 +1,7 @@
-"""Leakage checks that do not refit the forest.
+"""Leakage checks. The forest is not refit here.
 
-Imputation, scaling, and one-hot encoding stay inside a pipeline fit on the
-training fold. The operating threshold is a training out-of-fold choice.
+Imputation, scaling, and encoding are fit on the training fold. The threshold
+comes from training out-of-fold scores.
 """
 
 import inspect

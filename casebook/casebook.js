@@ -455,7 +455,7 @@
     var correct = (1 - ds.prevalence) * 100;
     document.getElementById("open-lede").textContent =
       pct(ds.prevalence, 2) + " of the file has a stroke recorded. Calling every row low-risk is right " +
-      correct.toFixed(1) + "% of the time and catches nobody. Majority accuracy is the trap.";
+      correct.toFixed(1) + "% of the time and catches nobody.";
     var imp = ds.imputation;
     document.getElementById("open-method").textContent =
       "Stratified 80/20 before imputation, seed " + ds.seed + ". Train median BMI " +
@@ -466,8 +466,7 @@
     var old = data.age_bands[data.age_bands.length - 1];
     document.getElementById("age-note").textContent =
       "Under 18 the rate is " + pct(young.rate) + " (" + young.strokes + " of " + young.n +
-      "). At 80 and older it is " + pct(old.rate) + " (" + old.strokes + " of " + old.n +
-      "). Age dominates the file.";
+      "). At 80 and older it is " + pct(old.rate) + " (" + old.strokes + " of " + old.n + ").";
 
     renderModels(data);
     drawRoc(data.roc);
