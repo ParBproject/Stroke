@@ -1,44 +1,28 @@
 ---
-title: "Earlier R pass — maintained analysis is the Python casebook"
+title: "Earlier stroke model in R"
 author: "ParBproject"
-date: "`r Sys.Date()`"
+date: "2025-09-08"
 output:
-  pdf_document: default
   html_document: default
 ---
 
-> Maintained analysis: the Python casebook (`python3 -m casebook.analyze`, page at `casebook/index.html`). This R Markdown file is an earlier unmaintained pass.
+Earlier pass, kept for the record. The analysis in this repository is `python3 -m casebook.analyze`.
 
-# About Data Analysis Report
+This file is not re-run, and it does not report results. If you run it, numeric medians are filled on the full file before the split, and the saved model is whichever one has the highest holdout AUC.
 
-The maintained casebook is the Python page at the repository root (`index.html`, `casebook/analyze.py`). This R Markdown is an earlier pass and is not re-knit in CI.
+# Load the file
 
-This RMarkdown file contains the report of the data analysis done for the project on building and deploying a stroke prediction model in R. It contains analysis such as data exploration, summary statistics and building the prediction models. The final report was completed on `r date()`. 
-
-**Data Description:**
-
-According to the World Health Organization (WHO) stroke is the 2nd leading cause of death globally, responsible for approximately 11% of total deaths.
-
-This data set is used to predict whether a patient is likely to get stroke based on the input parameters like gender, age, various diseases, and smoking status. Each row in the data provides relevant information about the patient.
-
-
-# Task One: Import data and data preprocessing
 
 ## Load data and install packages
 
 ```{r}
-# Install required packages (only run once)
 install.packages("tidyverse")
 install.packages("readr")
 
-# Load libraries
 library(tidyverse)
 library(readr)
 
-# Load dataset (with file path included)
 stroke_data <- read_csv("healthcare-dataset-stroke-data.csv")
-
-# Quick look at the dataset
 glimpse(stroke_data)
 head(stroke_data)
 
@@ -49,11 +33,6 @@ head(stroke_data)
 ## Describe and explore the data
 
 ```{r}
-# =========================
-# Describe & Explore the Data (creative color palette)
-# =========================
-
-# ---- 0) Packages ----
 req_pkgs <- c("tidyverse", "viridis", "RColorBrewer")
 new_pkgs <- req_pkgs[!(req_pkgs %in% installed.packages()[,"Package"])]
 if (length(new_pkgs)) install.packages(new_pkgs, quiet = TRUE)
@@ -63,11 +42,9 @@ library(RColorBrewer)
 
 theme_set(theme_minimal(base_size = 13))
 
-# ---- 1) Load data ----
 data_path <- "healthcare-dataset-stroke-data.csv"  # edit path if needed
 stroke_data_raw <- read_csv(data_path, show_col_types = FALSE)
 
-# ---- 2) Type-safe preprocessing ----
 stroke_data <- stroke_data_raw %>%
   mutate(
     bmi = na_if(bmi, "N/A"),
@@ -83,11 +60,9 @@ stroke_data <- stroke_data_raw %>%
   )
 if ("id" %in% names(stroke_data)) stroke_data <- select(stroke_data, -id)
 
-# ---- 3) Quick overview ----
 glimpse(stroke_data)
 colSums(is.na(stroke_data))
 
-# ---- 4) Class distribution ----
 if ("stroke" %in% names(stroke_data)) {
   class_dist <- stroke_data %>%
     count(stroke) %>%
@@ -101,7 +76,6 @@ if ("stroke" %in% names(stroke_data)) {
     theme(plot.title = element_text(face = "bold", hjust = 0.5))
 }
 
-# ---- 5) Categorical distributions ----
 cat_vars <- intersect(c("gender","ever_married","work_type","Residence_type","smoking_status"),
                       names(stroke_data))
 
@@ -118,7 +92,6 @@ for (cv in cat_vars) {
   print(p)
 }
 
-# ---- 6) Numeric distributions ----
 numeric_vars <- names(select(stroke_data, where(is.numeric)))
 if (length(numeric_vars) > 0) {
   stroke_data %>%
@@ -133,7 +106,6 @@ if (length(numeric_vars) > 0) {
           legend.position = "none")
 }
 
-# ---- 7) Stroke relationships (categorical) ----
 if ("stroke" %in% names(stroke_data)) {
   for (cv in cat_vars) {
     p2 <- stroke_data %>%
@@ -148,7 +120,6 @@ if ("stroke" %in% names(stroke_data)) {
   }
 }
 
-# ---- 8) Stroke relationships (numeric) ----
 if ("stroke" %in% names(stroke_data) & length(numeric_vars) > 0) {
   for (nv in numeric_vars) {
     p3 <- ggplot(stroke_data, aes(x = stroke, y = .data[[nv]], fill = stroke)) +
@@ -161,25 +132,14 @@ if ("stroke" %in% names(stroke_data) & length(numeric_vars) > 0) {
   }
 }
 
-# =========================
-# End: Describe & Explore
-# =========================
-
 
 ```
 
 
 
-# Task Two: Build prediction models
-
-> This earlier pass fits a numeric median on the full file before `createDataPartition`, and later deploys whichever model wins on holdout AUC. Both steps use evaluation rows in the fitting or model choice. It is not re-run here: the file is unmaintained and is not part of CI. Read `casebook/analyze.py` for the leakage-safe pipeline.
+# Fit three models
 
 ```{r}
-# =========================
-# Task Two: Build Prediction Models (repaired)
-# =========================
-
-# ---- 0) Packages ----
 req_pkgs <- c("caret", "randomForest", "rpart", "pROC")
 new_pkgs <- req_pkgs[!(req_pkgs %in% installed.packages()[,"Package"])]
 if (length(new_pkgs)) install.packages(new_pkgs, quiet = TRUE)
@@ -191,43 +151,37 @@ library(pROC)
 
 set.seed(123)
 
-# ---- 1) Start from your cleaned EDA dataset `stroke_data` ----
-# (If you still have 'id', drop it)
+# Drop id if it is still there.
 if ("id" %in% names(stroke_data)) stroke_data <- subset(stroke_data, select = -id)
 
-# Ensure all character categoricals are factors
 stroke_data <- stroke_data %>%
   mutate(across(where(is.character), as.factor))
 
-# Simple numeric impute (median) to avoid losing rows with NAs
+# Median fill on the whole file, before the split.
 stroke_data <- stroke_data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
 
-# ---- 2) FIX: target labels must be valid variable names ("No","Yes") ----
+# caret wants two class labels.
 stroke_data$stroke <- factor(
   ifelse(as.character(stroke_data$stroke) %in% c("1","Yes","Stroke","TRUE"), "Yes", "No"),
   levels = c("No","Yes")
 )
 
-# ---- 3) Train/test split ----
 train_index <- createDataPartition(stroke_data$stroke, p = 0.8, list = FALSE)
 train_data  <- stroke_data[train_index, ]
 test_data   <- stroke_data[-train_index, ]
 
-# ---- 4) Train Control (ROC with upsampling for class imbalance) ----
 ctrl <- trainControl(
   method = "cv",
   number = 5,
   classProbs = TRUE,
-  summaryFunction = twoClassSummary,  # gives ROC/Se/Sp
-  sampling = "up",                    # handle imbalance (upsample minority in each resample)
+  summaryFunction = twoClassSummary,
+  sampling = "up",
   savePredictions = "final"
 )
 
-# Common recipe: center/scale numeric predictors
 pp <- c("center","scale")
 
-# ---- 5) Logistic Regression ----
 set.seed(123)
 model_log <- train(
   stroke ~ ., data = train_data,
@@ -238,7 +192,6 @@ model_log <- train(
   metric = "ROC"
 )
 
-# ---- 6) Decision Tree (rpart) ----
 set.seed(123)
 model_tree <- train(
   stroke ~ ., data = train_data,
@@ -249,7 +202,6 @@ model_tree <- train(
   metric = "ROC"
 )
 
-# ---- 7) Random Forest ----
 set.seed(123)
 model_rf <- train(
   stroke ~ ., data = train_data,
@@ -260,50 +212,37 @@ model_rf <- train(
   metric = "ROC"
 )
 
-# ---- 8) Compare via resamples (cross-validated ROC) ----
 results <- resamples(list(Logistic = model_log,
                           DecisionTree = model_tree,
                           RandomForest = model_rf))
 print(summary(results))
 bwplot(results, metric = "ROC")
 
-# ---- 9) Keep models for the next task (evaluation on holdout test set) ----
 models <- list(Logistic = model_log,
                DecisionTree = model_tree,
                RandomForest = model_rf)
-
-# =========================
-# End: Task Two
-# =========================
 
 ```
 
 
 
 
-# Task Three: Evaluate and select prediction models
+# Score the holdout
 
 ```{r}
-# =========================
-# Task Three: Evaluate & Select Prediction Models
-# =========================
-
 library(caret)
 library(pROC)
 
 set.seed(123)
 
-# ---- 1) Predictions on test set ----
 pred_log <- predict(model_log,  newdata = test_data)
 pred_tree <- predict(model_tree, newdata = test_data)
 pred_rf <- predict(model_rf, newdata = test_data)
 
-# Probabilities (needed for ROC curves)
 prob_log <- predict(model_log,  newdata = test_data, type = "prob")[, "Yes"]
 prob_tree <- predict(model_tree, newdata = test_data, type = "prob")[, "Yes"]
 prob_rf <- predict(model_rf, newdata = test_data, type = "prob")[, "Yes"]
 
-# ---- 2) Confusion matrices ----
 cm_log <- confusionMatrix(pred_log,  test_data$stroke, positive = "Yes")
 cm_tree <- confusionMatrix(pred_tree, test_data$stroke, positive = "Yes")
 cm_rf <- confusionMatrix(pred_rf,   test_data$stroke, positive = "Yes")
@@ -315,7 +254,6 @@ print(cm_tree)
 cat("\n--- Random Forest ---\n")
 print(cm_rf)
 
-# ---- 3) ROC curves + AUC ----
 roc_log <- roc(test_data$stroke, prob_log, levels = c("No", "Yes"), direction = "<")
 roc_tree <- roc(test_data$stroke, prob_tree, levels = c("No", "Yes"), direction = "<")
 roc_rf <- roc(test_data$stroke, prob_rf, levels = c("No", "Yes"), direction = "<")
@@ -329,7 +267,6 @@ legend("bottomright", legend = c(
   paste("Random Forest (AUC =", round(auc(roc_rf), 3), ")")
 ), col = c("blue", "purple", "darkorange"), lwd = 2)
 
-# ---- 4) Model comparison table ----
 eval_results <- data.frame(
   Model = c("Logistic Regression", "Decision Tree", "Random Forest"),
   Accuracy = c(cm_log$overall["Accuracy"], cm_tree$overall["Accuracy"], cm_rf$overall["Accuracy"]),
@@ -341,31 +278,21 @@ eval_results <- data.frame(
 
 print(eval_results)
 
-# ---- 5) Select best model ----
 best_model_name <- eval_results$Model[which.max(eval_results$AUC)]
-cat("\n✅ Best model based on AUC is:", best_model_name, "\n")
-
-# =========================
-# End: Task Three
-# =========================
+cat("\nBest model based on AUC is:", best_model_name, "\n")
 
 ```
 
 
-# Task Four: Deploy the prediction model
+# Save the holdout winner
 
 ```{r}
-# =========================
-# Task Four: Deploy Prediction Model (fixed)
-# =========================
-
 library(caret)
 
-# 1) Pick best by AUC (or swap to Sensitivity if you prefer)
+# Highest holdout AUC. This uses the test labels to choose the model.
 best_model_name <- eval_results$Model[which.max(eval_results$AUC)]
-cat("✅ Deploying best model by AUC:", best_model_name, "\n")
+cat("Deploying best model by AUC:", best_model_name, "\n")
 
-# 2) Map pretty names -> list keys in `models`
 name_map <- c(
   "Logistic Regression" = "Logistic",
   "Decision Tree"       = "DecisionTree",
@@ -383,15 +310,12 @@ if (is.na(best_key) || is.null(models[[best_key]])) {
 
 best_model <- models[[best_key]]
 
-# 3) Save model
 saveRDS(best_model, "best_stroke_model.rds")
 
-# 4) Prediction helper (keeps factor levels, returns prob + label)
 predict_stroke <- function(new_data, model = best_model, threshold = 0.5) {
   stopifnot(!is.null(model))
   new_data <- as.data.frame(new_data)
 
-  # Ensure factor levels match training data where possible
   for (col in names(new_data)) {
     if (is.factor(new_data[[col]]) && col %in% names(train_data) && is.factor(train_data[[col]])) {
       new_data[[col]] <- factor(new_data[[col]], levels = levels(train_data[[col]]))
@@ -403,7 +327,7 @@ predict_stroke <- function(new_data, model = best_model, threshold = 0.5) {
   data.frame(Prediction = preds, Probability = probs, row.names = NULL)
 }
 
-# 5) Example input (ensure values/levels exist in your data)
+# One example row. Not a result.
 new_patient <- data.frame(
   gender          = factor("Male",            levels = levels(train_data$gender)),
   age             = 67,
@@ -417,63 +341,7 @@ new_patient <- data.frame(
   smoking_status  = factor("formerly smoked", levels = levels(train_data$smoking_status))
 )
 
-# 6) Predict
 predict_stroke(new_patient)
 
 
 ```
-
-
-
-
-# Task Five: Findings and Conclusions
-
-
-When I first looked at the dataset, one thing jumped out immediately: stroke cases are rare. Less than 5% of patients in the data actually had a stroke. That imbalance shaped the whole project, because in healthcare the real challenge is not just getting good accuracy — it’s making sure we don’t miss the people who are at risk.
-
-A few patterns made sense right away. Age was the clearest signal — older patients had a much higher stroke risk. Hypertension and heart disease also stood out, along with average glucose level. Smoking status and BMI played a role too, but the relationships were a bit noisier.
-
-I tested three different models:
-
-Logistic Regression gave me a solid baseline. It’s simple and interpretable, which is a big plus when you want to explain risk factors to doctors or patients.
-
-Decision Tree was the easiest to understand, but it didn’t perform very well overall.
-
-Random Forest came out on top in terms of raw predictive power, with the best ROC-AUC and recall.
-
-In the end, I saved the Random Forest as the “production” model because it did the best job of distinguishing stroke from non-stroke cases. But honestly, I think Logistic Regression deserves just as much credit — especially in healthcare, where interpretability matters almost as much as accuracy.
-
-So what does this all mean?
-
-It means stroke risk can be predicted with reasonable accuracy using fairly simple patient data. The model isn’t perfect (and it never will be), but it’s a helpful tool to flag high-risk patients early. If I were to take this project further, I’d want to add more clinical data, use techniques like SMOTE to balance the classes more effectively, and maybe build a Shiny app so clinicians could actually try it out.
-
-For now, the main takeaway is this: machine learning can spot hidden stroke risks, but the real power comes from combining predictions with medical judgment.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

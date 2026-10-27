@@ -134,7 +134,7 @@ def test_age_odds_ratio(payload):
 
 
 def test_operating_point_is_frozen_on_training_oof(payload):
-    """The published cutoff is the training rule, scored once on the holdout."""
+    """The cutoff is the training rule, scored once on the holdout."""
     grid = payload["thresholds"]
     assert any(abs(row["threshold"] - 0.15) < 1e-9 for row in grid)
     selection = payload["threshold_selection"]

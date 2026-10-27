@@ -1,4 +1,4 @@
-"""Fast checks for intervals, the age baseline, and the odds-ratio claim."""
+"""Checks for intervals, the age baseline, and the odds-ratio note."""
 
 import numpy as np
 import pytest

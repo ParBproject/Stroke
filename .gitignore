@@ -24,6 +24,16 @@ renv/staging/
 Thumbs.db
 ~$*
 
+# Agent tooling
+.cursor/
+.cursorrules
+AGENTS.md
+**/AGENTS.md
+.agents/
+agent-notes/
+prompts/
+plans/
+
 # Python
 __pycache__/
 .pytest_cache/
